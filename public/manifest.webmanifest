@@ -1,0 +1,19 @@
+{
+  "name": "LodgeMate Admin",
+  "short_name": "LodgeMate Admin",
+  "description": "Private administration portal for the LodgeMate student housing platform.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FCFCF6",
+  "theme_color": "#135C30",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

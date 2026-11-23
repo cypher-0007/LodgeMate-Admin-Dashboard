@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="canopy" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0D4322" />
+      <stop offset="100%" stop-color="#246E3A" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#canopy)" />
+  <path d="M256 112c-66.3 0-120 53.7-120 120 0 84 120 176 120 176s120-92 120-176c0-66.3-53.7-120-120-120zm0 162c-23.2 0-42-18.8-42-42s18.8-42 42-42 42 18.8 42 42-18.8 42-42 42z" fill="#F9FBF4" />
+</svg>
