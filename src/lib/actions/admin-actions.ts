@@ -118,6 +118,41 @@ export async function moderateUserAccountAction(
       return { ok: false, error: "Target user account not found." };
     }
 
+    if (actionType === "soft_delete") {
+      const { data: authResult, error: authError } = await adminDb.auth.admin.getUserById(targetUserId);
+      const email = authResult.user?.email?.trim().toLowerCase();
+      if (authError || !email) {
+        return { ok: false, error: "Could not retrieve the account email; account was not deleted." };
+      }
+      const { error: reserveError } = await adminDb.from("reserved_account_emails").insert({
+        email,
+        deleted_user_id: targetUserId,
+        reason,
+        deleted_by: admin.userId,
+      });
+      if (reserveError) {
+        return { ok: false, error: `Could not reserve this email; account was not deleted. ${reserveError.message}` };
+      }
+      await recordAdminAction({
+        actorId: admin.userId,
+        action: "user.permanent_delete",
+        targetType: "user",
+        targetId: targetUserId,
+        previousState: { account_status: profile.account_status, email },
+        resultingState: { deleted: true, email_reserved: true },
+        reason,
+      });
+      const { error: deleteError } = await adminDb.auth.admin.deleteUser(targetUserId);
+      if (deleteError) {
+        await adminDb.from("reserved_account_emails").delete().eq("deleted_user_id", targetUserId);
+        return { ok: false, error: `Permanent deletion failed; account remains active. ${deleteError.message}` };
+      }
+      revalidatePath("/users");
+      revalidatePath("/");
+      revalidatePath("/activity");
+      return { ok: true, message: "Account permanently deleted. Its email is reserved and cannot be reused." };
+    }
+
     // Calculate current distinct reporter count for audit context
     const { data: userReports } = await adminDb
       .from("reports")
@@ -188,7 +223,6 @@ export async function moderateUserAccountAction(
         deleted_at: new Date().toISOString(),
         full_name: "Deleted User",
         phone: null,
-        bio: null,
         moderation_reason: reason,
       };
     }

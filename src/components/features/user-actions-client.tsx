@@ -94,7 +94,7 @@ export function UserActionsClient({
         title={`Confirm Account Action: ${mode?.replace("_", " ").toUpperCase()}`}
         description={
           mode === "soft_delete"
-            ? "Soft deletion anonymises personal details while preserving financial, report, and audit records."
+            ? "Permanently deletes this account and reserves its email so it cannot be used to sign up again. This cannot be undone."
             : "This action will be enforced immediately and recorded in the immutable admin activity log."
         }
       >
