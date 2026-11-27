@@ -124,12 +124,19 @@ export async function moderateUserAccountAction(
       if (authError || !email) {
         return { ok: false, error: "Could not retrieve the account email; account was not deleted." };
       }
-      const { error: reserveError } = await adminDb.from("reserved_account_emails").insert({
-        email,
-        deleted_user_id: targetUserId,
-        reason,
-        deleted_by: admin.userId,
-      });
+      // A previous attempt may have reserved the email before failing to delete
+      // the Auth user. Treat that existing reservation as success so retries work.
+      const { error: reserveError } = await adminDb
+        .from("reserved_account_emails")
+        .upsert(
+          {
+            email,
+            deleted_user_id: targetUserId,
+            reason,
+            deleted_by: admin.userId,
+          },
+          { onConflict: "email", ignoreDuplicates: true }
+        );
       if (reserveError) {
         return { ok: false, error: `Could not reserve this email; account was not deleted. ${reserveError.message}` };
       }
@@ -144,7 +151,6 @@ export async function moderateUserAccountAction(
       });
       const { error: deleteError } = await adminDb.auth.admin.deleteUser(targetUserId);
       if (deleteError) {
-        await adminDb.from("reserved_account_emails").delete().eq("deleted_user_id", targetUserId);
         return { ok: false, error: `Permanent deletion failed; account remains active. ${deleteError.message}` };
       }
       revalidatePath("/users");
