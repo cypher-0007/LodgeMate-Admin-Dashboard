@@ -258,6 +258,7 @@ export async function moderateUserAccountAction(
 
 const VerificationDecisionSchema = z.object({
   submissionId: z.string().uuid(),
+  source: z.enum(["legacy", "provider_request"]).default("legacy"),
   userId: z.string().uuid(),
   decision: z.enum(["approved", "rejected", "info_requested", "resubmission_requested"]),
   reason: z.string().max(1000).optional(),
@@ -274,7 +275,7 @@ export async function decideVerificationAction(
       return { ok: false, error: "Invalid verification decision." };
     }
 
-    const { submissionId, userId, decision, reason, notes } = parsed.data;
+    const { submissionId, source, userId, decision, reason, notes } = parsed.data;
     if (decision !== "approved" && (!reason || reason.trim().length < 5)) {
       return {
         ok: false,
@@ -283,6 +284,33 @@ export async function decideVerificationAction(
     }
 
     const adminDb = getSupabaseAdmin();
+    if (source === "provider_request") {
+      if (decision !== "approved" && decision !== "rejected") {
+        return { ok: false, error: "Provider applications can only be approved or rejected." };
+      }
+      const status = decision === "approved" ? "approved" : "rejected";
+      const { data: request, error: requestError } = await adminDb
+        .from("provider_verification_requests")
+        .select("id, user_id, status")
+        .eq("id", submissionId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (requestError || !request) return { ok: false, error: requestError?.message ?? "Provider application not found." };
+      const { error: updateError } = await adminDb
+        .from("provider_verification_requests")
+        .update({ status, review_note: reason?.trim() || notes?.trim() || null, reviewed_at: new Date().toISOString(), reviewed_by: admin.userId, updated_at: new Date().toISOString() })
+        .eq("id", submissionId)
+        .eq("status", "in_review");
+      if (updateError) return { ok: false, error: updateError.message };
+      const { error: profileError } = await adminDb.from("profiles").update({ verified: decision === "approved" }).eq("id", userId);
+      if (profileError) return { ok: false, error: profileError.message };
+      await recordAdminAction({ actorId: admin.userId, action: `verification.${decision}`, targetType: "provider_verification_request", targetId: submissionId, previousState: { status: request.status }, resultingState: { status, profile_verified: decision === "approved" }, reason: reason?.trim() || `Verification ${decision}` });
+      revalidatePath("/verifications");
+      revalidatePath("/users");
+      revalidatePath(`/users/${userId}`);
+      revalidatePath("/activity");
+      return { ok: true, message: `Provider verification ${decision}.` };
+    }
     const { data: prev } = await adminDb
       .from("verification_submissions")
       .select("status, account_type")

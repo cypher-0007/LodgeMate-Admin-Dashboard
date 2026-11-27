@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function VerificationsPage() {
   const adminDb = getSupabaseAdmin();
 
-  const [users, submissionsRes, decisionsRes] = await Promise.all([
+  const [users, submissionsRes, providerRequestsRes, decisionsRes] = await Promise.all([
     fetchAllUsers(),
     safeQuery(
       () =>
@@ -19,6 +19,10 @@ export default async function VerificationsPage() {
           .from("verification_submissions")
           .select("*")
           .order("submitted_at", { ascending: false }),
+      [] as Array<Record<string, unknown>>
+    ),
+    safeQuery(
+      () => adminDb.from("provider_verification_requests").select("*").order("submitted_at", { ascending: false }),
       [] as Array<Record<string, unknown>>
     ),
     safeQuery(
@@ -56,12 +60,13 @@ export default async function VerificationsPage() {
     decisionsByUser.set(uid, list);
   }
 
-  const enriched: EnrichedVerificationSubmission[] = submissionsRes.data.map(
+  const legacy: EnrichedVerificationSubmission[] = submissionsRes.data.map(
     (s) => {
       const uid = String(s.user_id);
       const user = userMap.get(uid);
       return {
         id: String(s.id),
+        source: "legacy",
         userId: uid,
         userName: user?.full_name || user?.email || "Unknown User",
         userEmail: user?.email ?? null,
@@ -80,6 +85,27 @@ export default async function VerificationsPage() {
       };
     }
   );
+  const providerRequests: EnrichedVerificationSubmission[] = providerRequestsRes.data
+    .filter((s) => s.status === "in_review" || s.status === "approved" || s.status === "rejected")
+    .map((s) => {
+      const uid = String(s.user_id);
+      const user = userMap.get(uid);
+      return {
+        id: String(s.id),
+        source: "provider_request",
+        userId: uid,
+        userName: user?.full_name || user?.email || "Unknown User",
+        userEmail: user?.email ?? null,
+        userPhone: user?.phone ?? null,
+        accountType: String(s.provider_type || "landlord"),
+        status: String(s.status === "in_review" ? "pending" : s.status),
+        documentPaths: [s.id_document_path, s.selfie_path, s.property_proof_path].filter((p): p is string => typeof p === "string" && p.length > 0),
+        submittedMetadata: { review_note: s.review_note ?? null },
+        submittedAt: String(s.submitted_at ?? s.created_at),
+        previousDecisions: [],
+      };
+    });
+  const enriched = [...legacy, ...providerRequests].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   return (
     <div className="space-y-6">

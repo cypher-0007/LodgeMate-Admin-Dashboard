@@ -4,7 +4,7 @@ import { requireAdminApi } from "@/lib/auth/admin-guard";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 const QuerySchema = z.object({
-  bucket: z.enum(["verification-documents", "report-evidence", "beta-media"]),
+  bucket: z.enum(["verification-documents", "provider-verification", "report-evidence", "beta-media"]),
   path: z.string().min(1),
 });
 

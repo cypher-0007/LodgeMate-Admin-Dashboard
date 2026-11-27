@@ -19,6 +19,7 @@ import { cn, formatLagosDateTime } from "@/lib/utils";
 
 export interface EnrichedVerificationSubmission {
   id: string;
+  source: "legacy" | "provider_request";
   userId: string;
   userName: string;
   userEmail: string | null;
@@ -92,12 +93,12 @@ export function VerificationsClient({
     });
   }, [submissions, activeTab, statusFilter, search]);
 
-  const openSignedDocument = async (path: string) => {
+  const openSignedDocument = async (path: string, source: EnrichedVerificationSubmission["source"]) => {
     try {
       const res = await fetch("/api/admin/documents/signed-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bucket: "verification-documents", path }),
+        body: JSON.stringify({ bucket: source === "provider_request" ? "provider-verification" : "verification-documents", path }),
       });
       const data = await res.json();
       if (!res.ok || !data.signedUrl) {
@@ -115,6 +116,7 @@ export function VerificationsClient({
     setBusy(true);
     const res = await decideVerificationAction({
       submissionId: selected.id,
+      source: selected.source,
       userId: selected.userId,
       decision: decisionMode,
       reason: reason.trim() || undefined,
@@ -341,7 +343,7 @@ export function VerificationsClient({
                       key={path}
                       size="sm"
                       variant="outline"
-                      onClick={() => openSignedDocument(path)}
+                      onClick={() => openSignedDocument(path, selected.source)}
                     >
                       <FileText className="h-3.5 w-3.5" />
                       Document {idx + 1}
