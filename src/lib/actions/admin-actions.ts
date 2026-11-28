@@ -424,7 +424,7 @@ export async function updateListingStatusAction(
     const adminDb = getSupabaseAdmin();
     const { data: existing, error: fetchErr } = await adminDb
       .from("listings")
-      .select("id, title, owner_id, status, verified, ownership_proof_path")
+      .select("id, title, owner_id, status, verified, ownership_proof_path, lodge_profile_id")
       .eq("id", parsed.data.listingId)
       .maybeSingle();
 
@@ -436,9 +436,27 @@ export async function updateListingStatusAction(
         .select("provider_type")
         .eq("id", existing.owner_id)
         .maybeSingle();
-      if (ownerProfile?.provider_type === "landlord" && !existing.ownership_proof_path) {
-        return { ok: false, error: "This landlord listing needs lodge specific ownership proof before it can be approved." };
+      if (["landlord", "agent"].includes(ownerProfile?.provider_type ?? "") && !existing.ownership_proof_path) {
+        if (!existing.lodge_profile_id) {
+          return { ok: false, error: "This landlord listing needs a lodge profile and ownership proof before it can be approved." };
+        }
+        const { data: lodgeProfile } = await adminDb
+          .from("lodge_profiles")
+          .select("id, ownership_proof_path")
+          .eq("id", existing.lodge_profile_id)
+          .maybeSingle();
+        if (!lodgeProfile?.ownership_proof_path) {
+          return { ok: false, error: "This lodge profile needs ownership proof before its room openings can be approved." };
+        }
       }
+    }
+
+    if (parsed.data.status === "approved" && existing.lodge_profile_id) {
+      const { error: lodgeApprovalError } = await adminDb
+        .from("lodge_profiles")
+        .update({ status: "approved", updated_at: new Date().toISOString() })
+        .eq("id", existing.lodge_profile_id);
+      if (lodgeApprovalError) return { ok: false, error: lodgeApprovalError.message };
     }
 
     const nextVerified = parsed.data.status === "approved";

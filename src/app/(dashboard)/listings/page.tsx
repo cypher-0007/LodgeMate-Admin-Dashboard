@@ -15,7 +15,7 @@ export default async function ListingsPage() {
     fetchAllUsers(),
     adminDb
       .from("listings")
-      .select("*")
+      .select("*, lodge_profiles(id,name,description,front_photo_url,compound_photo_url,lobby_photo_url,ownership_proof_path,status)")
       .order("created_at", { ascending: false }),
     adminDb
       .from("reports")
@@ -33,6 +33,9 @@ export default async function ListingsPage() {
 
   const enriched: EnrichedListingRow[] = await Promise.all((listingsRes.data ?? []).map(
     async (l: Record<string, unknown>) => {
+      const lodgeProfile = l.lodge_profiles && typeof l.lodge_profiles === "object"
+        ? l.lodge_profiles as Record<string, unknown>
+        : null;
       const ownerId = String(l.owner_id);
       const owner = userMap.get(ownerId);
       const id = String(l.id);
@@ -55,7 +58,16 @@ export default async function ListingsPage() {
         reportCount: reportCounts.get(id) ?? 0,
         createdAt: String(l.created_at),
         availableRooms: Number(l.available_rooms) || 1,
-        ownershipProofPath: typeof l.ownership_proof_path === "string" ? l.ownership_proof_path : null,
+        lodgeProfileName: typeof lodgeProfile?.name === "string" ? lodgeProfile.name : null,
+        lodgeProfileStatus: typeof lodgeProfile?.status === "string" ? lodgeProfile.status : null,
+        lodgeProfileDescription: typeof lodgeProfile?.description === "string" ? lodgeProfile.description : null,
+        lodgeProfilePhotos: [lodgeProfile?.front_photo_url, lodgeProfile?.compound_photo_url, lodgeProfile?.lobby_photo_url].filter((url): url is string => typeof url === "string"),
+        roomLocation: typeof l.room_location === "string" ? l.room_location : null,
+        roomVideoUrl: typeof l.video_url === "string" ? l.video_url : null,
+        roomImageUrls: Array.isArray(l.room_image_urls) ? l.room_image_urls.filter((url): url is string => typeof url === "string") : [],
+        ownershipProofPath: typeof lodgeProfile?.ownership_proof_path === "string"
+          ? lodgeProfile.ownership_proof_path
+          : typeof l.ownership_proof_path === "string" ? l.ownership_proof_path : null,
       };
     }
   ));

@@ -38,6 +38,13 @@ export interface EnrichedListingRow {
   createdAt: string;
   availableRooms: number;
   ownershipProofPath: string | null;
+  lodgeProfileName: string | null;
+  lodgeProfileStatus: string | null;
+  lodgeProfileDescription: string | null;
+  lodgeProfilePhotos: string[];
+  roomLocation: string | null;
+  roomVideoUrl: string | null;
+  roomImageUrls: string[];
 }
 
 export function ListingsClient({
@@ -64,7 +71,7 @@ export function ListingsClient({
     statusFilter !== "all" ||
     locationFilter !== "all" ||
     reportedOnly;
-  const needsOwnershipProof = selected?.ownerType.toLowerCase() === "landlord" && !selected.ownershipProofPath;
+  const needsOwnershipProof = Boolean(selected && ["landlord", "agent"].includes(selected.ownerType.toLowerCase()) && !selected.ownershipProofPath);
 
   const clearFilters = () => {
     setSearch("");
@@ -81,7 +88,7 @@ export function ListingsClient({
       if (reportedOnly && l.reportCount === 0) return false;
       if (q) {
         const hay =
-          `${l.title} ${l.area} ${l.school} ${l.ownerName} ${l.kind}`.toLowerCase();
+          `${l.title} ${l.lodgeProfileName ?? ""} ${l.area} ${l.school} ${l.ownerName} ${l.kind}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -205,7 +212,7 @@ export function ListingsClient({
                         {l.title}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {l.kind}
+                        {l.lodgeProfileName ? (l.kind === "Bedspace" ? "Bedspace opening" : "Room opening") : l.kind}
                         {l.isBeta ? " · Beta Lodge" : ""} ·{" "}
                         {formatLagosDate(l.createdAt)}
                       </p>
@@ -297,7 +304,7 @@ export function ListingsClient({
         title={selected?.title || "Listing Details"}
         description={
           selected
-            ? `${selected.kind} · ${selected.school} (${selected.area}) · ${selected.availableRooms} room(s) available · ${formatNgn(selected.price)} ${selected.period}`
+            ? `${selected.kind} · ${selected.lodgeProfileName ? `${selected.lodgeProfileName} · ` : ""}${selected.school} (${selected.area}) · ${selected.roomLocation || "Location not specified"} · ${formatNgn(selected.price)} ${selected.period}`
             : undefined
         }
         maxWidth="max-w-2xl"
@@ -323,8 +330,21 @@ export function ListingsClient({
               )}
             </div>
             <p className="text-muted-foreground">{selected.description}</p>
+            {selected.roomImageUrls.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {selected.roomImageUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`${selected.title} room ${index + 1}`} className="aspect-[4/3] w-full rounded-lg object-cover" />)}
+              </div>
+            )}
+            {selected.roomVideoUrl && <a href={selected.roomVideoUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">Open room video →</a>}
+            {selected.lodgeProfileName && (
+              <div className="rounded-xl border border-border p-3">
+                <div className="flex items-center justify-between gap-2"><strong>{selected.lodgeProfileName}</strong><StatusBadge status={selected.lodgeProfileStatus || "pending"} /></div>
+                {selected.lodgeProfileDescription && <p className="mt-1 text-xs text-muted-foreground">{selected.lodgeProfileDescription}</p>}
+                <div className="mt-2 grid grid-cols-3 gap-2">{selected.lodgeProfilePhotos.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`${selected.lodgeProfileName} property view ${index + 1}`} className="aspect-[4/3] w-full rounded-md object-cover" />)}</div>
+              </div>
+            )}
             <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
-              Lodge rooms available: <strong>{selected.availableRooms}</strong>
+              Opening count: <strong>{selected.availableRooms}</strong>
               <div className="mt-2">
                 {selected.ownershipProofPath ? (
                   proofUrl ? <a href={proofUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">Open ownership proof →</a> : <Button size="sm" variant="outline" disabled={proofBusy} onClick={() => void openOwnershipProof()}>{proofBusy ? "Preparing proof…" : "View ownership proof"}</Button>
@@ -335,7 +355,7 @@ export function ListingsClient({
             </div>
             {needsOwnershipProof && (
               <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-                A landlord must submit lodge specific ownership proof before this listing can be approved.
+                This host must submit property ownership or management proof before this room opening can be approved.
               </p>
             )}
             <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
