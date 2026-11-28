@@ -15,7 +15,7 @@ import {
   StatusBadge,
   Textarea,
 } from "@/components/ui/primitives";
-import { updateListingStatusAction } from "@/lib/actions/admin-actions";
+import { getLodgeOwnershipProofUrlAction, updateListingStatusAction } from "@/lib/actions/admin-actions";
 import { formatLagosDate, formatNgn } from "@/lib/utils";
 
 export interface EnrichedListingRow {
@@ -36,6 +36,8 @@ export interface EnrichedListingRow {
   status: string;
   reportCount: number;
   createdAt: string;
+  availableRooms: number;
+  ownershipProofPath: string | null;
 }
 
 export function ListingsClient({
@@ -54,12 +56,15 @@ export function ListingsClient({
   const [selected, setSelected] = useState<EnrichedListingRow | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [proofBusy, setProofBusy] = useState(false);
 
   const hasActiveFilters =
     search.trim() !== "" ||
     statusFilter !== "all" ||
     locationFilter !== "all" ||
     reportedOnly;
+  const needsOwnershipProof = selected?.ownerType.toLowerCase() === "landlord" && !selected.ownershipProofPath;
 
   const clearFilters = () => {
     setSearch("");
@@ -102,6 +107,18 @@ export function ListingsClient({
     setSelected(null);
     setNote("");
     router.refresh();
+  };
+
+  const openOwnershipProof = async () => {
+    if (!selected?.ownershipProofPath) return;
+    setProofBusy(true);
+    const result = await getLodgeOwnershipProofUrlAction(selected.ownershipProofPath);
+    setProofBusy(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    if (result.data) setProofUrl(result.data);
   };
 
   return (
@@ -229,6 +246,7 @@ export function ListingsClient({
                         variant="outline"
                         onClick={() => {
                           setSelected(l);
+                          setProofUrl(null);
                           setNote("");
                         }}
                       >
@@ -260,6 +278,7 @@ export function ListingsClient({
                     variant="outline"
                     onClick={() => {
                       setSelected(l);
+                      setProofUrl(null);
                       setNote("");
                     }}
                   >
@@ -274,11 +293,11 @@ export function ListingsClient({
 
       <Modal
         open={Boolean(selected)}
-        onClose={() => setSelected(null)}
+        onClose={() => { setSelected(null); setProofUrl(null); }}
         title={selected?.title || "Listing Details"}
         description={
           selected
-            ? `${selected.kind} · ${selected.school} (${selected.area}) · ${formatNgn(selected.price)} ${selected.period}`
+            ? `${selected.kind} · ${selected.school} (${selected.area}) · ${selected.availableRooms} room(s) available · ${formatNgn(selected.price)} ${selected.period}`
             : undefined
         }
         maxWidth="max-w-2xl"
@@ -305,6 +324,21 @@ export function ListingsClient({
             </div>
             <p className="text-muted-foreground">{selected.description}</p>
             <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
+              Lodge rooms available: <strong>{selected.availableRooms}</strong>
+              <div className="mt-2">
+                {selected.ownershipProofPath ? (
+                  proofUrl ? <a href={proofUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">Open ownership proof →</a> : <Button size="sm" variant="outline" disabled={proofBusy} onClick={() => void openOwnershipProof()}>{proofBusy ? "Preparing proof…" : "View ownership proof"}</Button>
+                ) : (
+                  <span className="text-muted-foreground">No lodge specific ownership proof submitted.</span>
+                )}
+              </div>
+            </div>
+            {needsOwnershipProof && (
+              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                A landlord must submit lodge specific ownership proof before this listing can be approved.
+              </p>
+            )}
+            <div className="rounded-xl border border-border bg-muted/30 p-3 text-xs">
               Host: <strong>{selected.ownerName}</strong> ({selected.ownerType}) ·{" "}
               <Link
                 href={`/users/${selected.ownerId}`}
@@ -327,7 +361,7 @@ export function ListingsClient({
               {selected.status !== "approved" && (
                 <Button
                   size="sm"
-                  disabled={busy}
+                  disabled={busy || Boolean(needsOwnershipProof)}
                   onClick={() => handleStatusChange(selected.id, "approved")}
                 >
                   {selected.status === "removed" ? "Restore & Publish" : "Approve & Verify"}

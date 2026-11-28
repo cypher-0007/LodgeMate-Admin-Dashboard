@@ -424,11 +424,22 @@ export async function updateListingStatusAction(
     const adminDb = getSupabaseAdmin();
     const { data: existing, error: fetchErr } = await adminDb
       .from("listings")
-      .select("id, title, status, verified")
+      .select("id, title, owner_id, status, verified, ownership_proof_path")
       .eq("id", parsed.data.listingId)
       .maybeSingle();
 
     if (fetchErr || !existing) return { ok: false, error: "Listing not found." };
+
+    if (parsed.data.status === "approved") {
+      const { data: ownerProfile } = await adminDb
+        .from("profiles")
+        .select("provider_type")
+        .eq("id", existing.owner_id)
+        .maybeSingle();
+      if (ownerProfile?.provider_type === "landlord" && !existing.ownership_proof_path) {
+        return { ok: false, error: "This landlord listing needs lodge specific ownership proof before it can be approved." };
+      }
+    }
 
     const nextVerified = parsed.data.status === "approved";
 
@@ -606,6 +617,11 @@ export async function updateFeedbackAction(
 
 export async function markNotificationReadAction(id: string): Promise<ActionResult> {
   try {
+    // Older or malformed notification rows can arrive without an id. Validate
+    // before passing the value to Postgres' UUID column filter.
+    if (!z.string().uuid().safeParse(id).success) {
+      return { ok: false, error: "This notification has an invalid ID. Refresh the page and try again." };
+    }
     await requireAdminApi();
     const adminDb = getSupabaseAdmin();
     const { error } = await adminDb
@@ -618,6 +634,21 @@ export async function markNotificationReadAction(id: string): Promise<ActionResu
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to mark read." };
+  }
+}
+
+export async function getLodgeOwnershipProofUrlAction(path: string): Promise<ActionResult<string>> {
+  try {
+    await requireAdminApi();
+    if (typeof path !== "string" || path.length > 512 || path.startsWith("/")) {
+      return { ok: false, error: "Invalid ownership proof path." };
+    }
+    const { data, error } = await getSupabaseAdmin()
+      .storage.from("lodge-ownership-proofs").createSignedUrl(path, 5 * 60);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, data: data.signedUrl };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Unable to open ownership proof." };
   }
 }
 

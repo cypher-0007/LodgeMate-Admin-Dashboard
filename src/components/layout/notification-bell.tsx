@@ -26,13 +26,19 @@ export interface AdminNotificationItem {
   created_at: string;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function hasValidId(item: AdminNotificationItem): boolean {
+  return typeof item.id === "string" && UUID_PATTERN.test(item.id);
+}
+
 export function NotificationBell({
   initialItems,
 }: {
   initialItems: AdminNotificationItem[];
 }) {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<AdminNotificationItem[]>(initialItems);
+  const [items, setItems] = useState<AdminNotificationItem[]>(() => initialItems.filter(hasValidId));
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const unreadCount = items.filter((n) => !n.is_read).length;
@@ -78,6 +84,7 @@ export function NotificationBell({
         },
         (payload) => {
           const next = payload.new as AdminNotificationItem;
+          if (!hasValidId(next)) return;
           setItems((prev) => {
             if (prev.some((i) => i.id === next.id)) return prev;
             return [next, ...prev].slice(0, 30);

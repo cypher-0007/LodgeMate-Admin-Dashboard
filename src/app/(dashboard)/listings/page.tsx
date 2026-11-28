@@ -31,8 +31,8 @@ export default async function ListingsPage() {
     }
   }
 
-  const enriched: EnrichedListingRow[] = (listingsRes.data ?? []).map(
-    (l: Record<string, unknown>) => {
+  const enriched: EnrichedListingRow[] = await Promise.all((listingsRes.data ?? []).map(
+    async (l: Record<string, unknown>) => {
       const ownerId = String(l.owner_id);
       const owner = userMap.get(ownerId);
       const id = String(l.id);
@@ -54,9 +54,11 @@ export default async function ListingsPage() {
         status: String(l.status || "pending"),
         reportCount: reportCounts.get(id) ?? 0,
         createdAt: String(l.created_at),
+        availableRooms: Number(l.available_rooms) || 1,
+        ownershipProofPath: typeof l.ownership_proof_path === "string" ? l.ownership_proof_path : null,
       };
     }
-  );
+  ));
 
   return (
     <div className="space-y-6">
